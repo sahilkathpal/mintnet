@@ -168,6 +168,11 @@ func main() {
 					Usage: "Docker image to use for tendermint app",
 					Value: "tendermint/tmbase",
 				},
+				cli.StringFlag{
+					Name:  "tmapp-ports",
+					Usage: "Port bindings for the app",
+					Value: "",
+				},
 				machFlag,
 			},
 			Action: func(c *cli.Context) error {

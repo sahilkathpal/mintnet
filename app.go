@@ -39,6 +39,7 @@ func cmdStart(c *cli.Context) {
 	noTMSP := c.Bool("no-tmsp")
 	tmcoreImage := c.String("tmcore-image")
 	tmappImage := c.String("tmapp-image")
+	tmappPorts := c.String("tmapp-ports")
 
 	// chain config tells us which validator set we're working with (named or anon)
 	chainCfg, err := ReadBlockchainInfo(base)
@@ -80,7 +81,7 @@ func cmdStart(c *cli.Context) {
 					errCh <- err
 					return
 				}
-				if err := startTMApp(mach, app, tmappImage); err != nil {
+				if err := startTMApp(mach, app, tmappImage, tmappPorts); err != nil {
 					errCh <- err
 					return
 				}
@@ -221,9 +222,16 @@ func startTMData(mach, app string) error {
 	return errors.New("Failed to start tmdata on machine " + mach + " (timeout)")
 }
 
-func startTMApp(mach, app, image string) error {
-	args := []string{"ssh", mach, Fmt(`docker run --name %v_tmapp --volumes-from %v_tmcommon -d `+
-		`%v /data/tendermint/app/init.sh`, app, app, image)}
+func startTMApp(mach, app, image, ports string) error {
+	var portString string
+	spl := strings.Split(ports, ",")
+	for _, s := range spl {
+		if s != "" {
+			portString = fmt.Sprintf("%s -p %s", portString, s)
+		}
+	}
+	args := []string{"ssh", mach, Fmt(`docker run --name %v_tmapp --volumes-from %v_tmcommon %s -d `+
+		`%v /data/tendermint/app/init.sh`, app, app, portString, image)}
 	if !runProcess("start-tmapp-"+mach, "docker-machine", args, true) {
 		return errors.New("Failed to start tmapp on machine " + mach)
 	}
