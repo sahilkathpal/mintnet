@@ -173,6 +173,10 @@ func main() {
 					Usage: "Port bindings for the app",
 					Value: "",
 				},
+				cli.BoolFlag{
+					Name:  "logrotate",
+					Usage: "Start tendermint/logrotate container",
+				},
 				machFlag,
 			},
 			Action: func(c *cli.Context) error {

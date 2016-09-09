@@ -40,6 +40,7 @@ func cmdStart(c *cli.Context) {
 	tmcoreImage := c.String("tmcore-image")
 	tmappImage := c.String("tmapp-image")
 	tmappPorts := c.String("tmapp-ports")
+	logrotate := c.Bool("logrotate")
 
 	// chain config tells us which validator set we're working with (named or anon)
 	chainCfg, err := ReadBlockchainInfo(base)
@@ -92,6 +93,13 @@ func cmdStart(c *cli.Context) {
 			if err != nil {
 				errCh <- err
 				return
+			}
+
+			if logrotate {
+				if err := startLogrotate(mach, app); err != nil {
+					errCh <- err
+					return
+				}
 			}
 			coreInfosCh <- coreInfo
 		}(machName)
@@ -234,6 +242,15 @@ func startTMApp(mach, app, image, ports string) error {
 		`%v /data/tendermint/app/init.sh`, app, app, portString, image)}
 	if !runProcess("start-tmapp-"+mach, "docker-machine", args, true) {
 		return errors.New("Failed to start tmapp on machine " + mach)
+	}
+	return nil
+}
+
+func startLogrotate(mach, app string) error {
+	args := []string{"ssh", mach, Fmt(`docker run --name %v_logrotate --volumes-from %v_tmcommon -d `+
+		`-v /var/lib/docker/containers:/var/lib/docker/containers:rw tendermint/logrotate`, app, app)}
+	if !runProcess("start-logrotate-"+mach, "docker-machine", args, true) {
+		return errors.New("Failed to start logrotate on machine " + mach)
 	}
 	return nil
 }
@@ -442,6 +459,14 @@ func stopTMData(mach, app string) error {
 	return nil
 }
 
+func stopLogrotate(mach, app string) error {
+	args := []string{"ssh", mach, Fmt(`docker stop %v_logrotate`, app)}
+	if !runProcess("stop-logrotate-"+mach, "docker-machine", args, true) {
+		return errors.New("Failed to stop logrotate on machine " + mach)
+	}
+	return nil
+}
+
 func stopTMCore(mach, app string) error {
 	args := []string{"ssh", mach, Fmt(`docker stop %v_tmcore`, app)}
 	if !runProcess("stop-tmcore-"+mach, "docker-machine", args, true) {
@@ -480,6 +505,7 @@ func cmdRm(c *cli.Context) {
 				stopTMData(mach, app)
 				stopTMCore(mach, app)
 				stopTMApp(mach, app)
+				stopLogrotate(mach, app)
 			}(mach)
 		}
 		wg.Wait()
