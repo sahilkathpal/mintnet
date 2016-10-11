@@ -219,13 +219,25 @@ func main() {
 		},
 
 		{
-			Name:  "docker",
-			Usage: "Execute a docker command on all machines",
+			Name:  "ssh",
+			Usage: "Execute a command through ssh on all machines",
 			Flags: []cli.Flag{
 				machFlag,
 			},
 			Action: func(c *cli.Context) error {
-				cmdDocker(c)
+				cmdSsh(c)
+				return nil
+			},
+		},
+
+		{
+			Name:  "scp",
+			Usage: "Copy a file through scp on all machines",
+			Flags: []cli.Flag{
+				machFlag,
+			},
+			Action: func(c *cli.Context) error {
+				cmdScp(c)
 				return nil
 			},
 		},
