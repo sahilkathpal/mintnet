@@ -13,26 +13,47 @@ import (
 
 //--------------------------------------------------------------------------------
 
-func cmdDocker(c *cli.Context) {
+func cmdSsh(c *cli.Context) {
 	args := c.Args()
 	machines := ParseMachines(c.String("machines"))
+	cmdBase(args, machines, sshCmd)
+}
 
+func cmdScp(c *cli.Context) {
+	args := c.Args()
+	machines := ParseMachines(c.String("machines"))
+	fmt.Println(args, machines)
+	cmdBase(args, machines, scpCmd)
+}
+
+func cmdBase(args, machines []string, cmd func(string, []string) error) {
 	var wg sync.WaitGroup
 	for _, mach := range machines {
 		wg.Add(1)
 		go func(mach string) {
 			maybeSleep(len(machines), 2000)
 			defer wg.Done()
-			dockerCmd(mach, args)
+			cmd(mach, args)
 		}(mach)
 	}
 	wg.Wait()
 }
 
-func dockerCmd(mach string, args []string) error {
-	args = []string{"ssh", mach, "docker " + strings.Join(args, " ")}
-	if !runProcess("docker-cmd-"+mach, "docker-machine", args, true) {
-		return errors.New("Failed to exec docker command on machine " + mach)
+func sshCmd(mach string, args []string) error {
+	args = []string{"ssh", mach, strings.Join(args, " ")}
+	if !runProcess("ssh-cmd-"+mach, "docker-machine", args, true) {
+		return errors.New("Failed to exec ssh command on machine " + mach)
+	}
+	return nil
+}
+
+func scpCmd(mach string, args []string) error {
+	if len(args) != 2 {
+		return errors.New("scp expects exactly two args")
+	}
+	args = []string{"scp", args[0], mach + ":" + args[1]}
+	if !runProcess("ssh-cmd-"+mach, "docker-machine", args, true) {
+		return errors.New("Failed to exec ssh command on machine " + mach)
 	}
 	return nil
 }
