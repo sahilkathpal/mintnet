@@ -8,7 +8,7 @@ define NEWLINE
 endef
 NOVENDOR = go list github.com/tendermint/mintnet/... | grep -v /vendor/
 
-install: get_deps
+install: 
 	go install github.com/tendermint/mintnet
 
 test: 
@@ -17,7 +17,7 @@ test:
 test_race: 
 	go test -race `${NOVENDOR}`
 
-test_integrations: test_race
+test_integrations: get_vendor_deps install test_race
 	bash ./test/test.sh
 
 get_deps:
@@ -29,3 +29,6 @@ get_deps:
 update_deps:
 	go get -d -u github.com/tendermint/mintnet
 
+get_vendor_deps:
+	go get github.com/Masterminds/glide
+	glide install

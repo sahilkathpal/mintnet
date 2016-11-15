@@ -15,7 +15,10 @@ echo "Current branch: $BRANCH"
 if [[ "$BRANCH" == "master" || "$BRANCH" == "staging" ]]; then
 	# NOTE: DIGITALOCEAN_ACCESS_TOKEN must be set!
 
+	# cert errors are all the rage these days ...
+	set +e
 	mintnet create --machines "${MACH_PREFIX}[1-$N]" -- --driver=digitalocean --digitalocean-image=docker
+	set -e
 
 	mintnet init --machines "${MACH_PREFIX}[1-$N]" chain mytest_dir/
 
