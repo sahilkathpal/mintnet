@@ -4,6 +4,7 @@ machine:
     GOPATH: /home/ubuntu/.go_workspace
     REPO: $GOPATH/src/github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME
     MACH_PREFIX: mintnet-test-mach
+    GO15VENDOREXPERIMENT: 1
   hosts:
     circlehost: 127.0.0.1
     localhost: 127.0.0.1
@@ -18,7 +19,6 @@ dependencies:
   override:
     - sudo curl -sSL -o /usr/bin/docker-machine https://github.com/docker/machine/releases/download/v$DOCKER_MACHINE_VERSION/docker-machine-linux-x86_64; sudo chmod 0755 /usr/bin/docker-machine
     - go version
-    - "cd $REPO && make install"
 
 test:
   override:

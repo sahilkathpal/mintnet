@@ -249,7 +249,10 @@ func initDataDirectory(base string) error {
 # This is a sample bash script for MerkleEyes.
 # NOTE: mintnet expects data.sock to be created
 
-go get github.com/tendermint/merkleeyes/cmd/merkleeyes
+go get github.com/tendermint/merkleeyes
+cd $GOPATH/src/github.com/tendermint/merkleeyes
+make get_vendor_deps
+make install
 
 merkleeyes server --address="unix:///data/tendermint/data/data.sock"`)
 
@@ -271,7 +274,11 @@ func initAppDirectory(base, app string) error {
 		scriptBytes = []byte(`#! /bin/bash
 # This is a sample bash script for a TMSP application
 
-go get github.com/tendermint/tmsp/cmd/dummy
+go get github.com/tendermint/tmsp
+cd $GOPATH/src/github.com/tendermint/tmsp
+make get_vendor_deps
+make install
+
 dummy --addr="unix:///data/tendermint/app/app.sock" # --eyes="unix:///data/tendermint/data/data.sock"`)
 	} else {
 		var err error
@@ -311,6 +318,7 @@ go get -d $TMREPO/cmd/tendermint
 cd $GOPATH/src/$TMREPO
 git fetch origin $BRANCH
 git checkout $BRANCH
+make get_vendor_deps
 make install
 
 tendermint node --seeds="$TMSEEDS" --moniker="$TMNAME" --proxy_app="$PROXYAPP"`)

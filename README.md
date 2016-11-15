@@ -1,3 +1,9 @@
+# Mintnet
+
+[![CircleCI](https://circleci.com/gh/tendermint/mintnet.svg?style=svg)](https://circleci.com/gh/tendermint/mintnet)
+
+## Install
+
 First, install [`docker-machine`](https://docs.docker.com/machine/install-machine/) and get a DigitalOcean account and access token.
 
 Then, install `mintnet`.
@@ -5,6 +11,16 @@ Then, install `mintnet`.
 ```
 go get github.com/tendermint/mintnet
 ```
+
+If the `go get` fails, you may need to use `glide` to install vendored dependencies:
+
+```
+cd $GOPATH/src/github.com/tendermint/mintnet
+make get_vendor_deps
+go install
+```
+
+## Deploy
 
 To create machines on DigitalOcean:
 
