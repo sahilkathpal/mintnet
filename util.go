@@ -61,7 +61,7 @@ func runProcess(label string, command string, args []string, verbose bool) bool 
 
 func runProcessGetResult(label string, command string, args []string, verbose bool) (string, bool) {
 	outFile := NewBufferCloser(nil)
-	proc, err := pcm.StartProcess(label, command, args, nil, outFile)
+	proc, err := pcm.StartProcess(label, "", command, args, nil, outFile)
 	if err != nil {
 		if verbose {
 			fmt.Println(Red(err.Error()))
