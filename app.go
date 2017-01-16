@@ -538,3 +538,329 @@ func rmContainer(mach, container string, force bool) error {
 	}
 	return nil
 }
+
+//--------------------------------------------------------------------------------------------
+func cmdJoin (c *cli.Context) {
+	args := c.Args()
+	if len(args) != 2 {
+		cli.ShowAppHelp(c)
+		return
+	}
+	app := args[0]
+	base := args[1]
+	// machines := ParseMachines(c.String("machines")) Sahil
+	randomPorts := c.Bool("publish-all")
+	seedsStr := c.String("seeds")
+	seeds := []string{}
+	if seedsStr != "" {
+		seeds = strings.Split(seedsStr, ",")
+	}
+	noTMSP := c.Bool("no-tmsp")
+	tmcoreImage := c.String("tmcore-image")
+	tmappImage := c.String("tmapp-image")
+	tmappPorts := c.String("tmapp-ports")
+	logrotate := c.Bool("logrotate")
+	ipAddress := c.String("ip")
+
+	// chain config tells us which validator set we're working with (named or anon)
+	chainCfg, err := ReadBlockchainInfo(base)
+	if err != nil {
+		Exit(err.Error())
+	}
+	chainCfg.ID = app
+
+	startTime := time.Now()
+
+	// Initialize TMData, TMApp, and TMCore container on each machine
+	// We let nodes boot and then detect which port they're listening on to collect CoreInfos
+	// var wg sync.WaitGroup Sahil
+	// coreInfosCh := make(chan *CoreInfo, len(machines)) Sahil duplicate
+	coreInfosCh := make(chan *CoreInfo, 1)
+	// errCh := make(chan error, len(machines)) Sahil duplicate
+	errCh := make(chan error, 1)
+	// for _, machName := range machines { Sahil
+		// wg.Add(1) Sahil
+		// attempt to avoid aws ec2 request limit errors ( :( )
+		// maybeSleep(len(machines), 2000) Sahil
+		// go func(mach string) { Sahil duplicate
+		go func () {
+			// defer wg.Done() Sahil
+
+			// maybeSleep(len(machines), 5000) Sahil
+			if err := startPrivTMCommon(app); err != nil {
+				errCh <- err
+				return
+			}
+
+			// maybeSleep(len(machines), 5000) Sahil
+			if err := copyPrivNodeDir(app, base); err != nil {
+				errCh <- err
+				return
+			}
+
+			// if noTMSP, we ignore socket and app containers
+			// and just use an in-process null app
+			if !noTMSP {
+				if err := startPrivTMData(app); err != nil {
+					errCh <- err
+					return
+				}
+				if err := startPrivTMApp(app, tmappImage, tmappPorts); err != nil {
+					errCh <- err
+					return
+				}
+			}
+
+			// maybeSleep(len(machines), 5000) Sahil
+			coreInfo, err := startPrivTMCore(ipAddress, app, nil, randomPorts, noTMSP, tmcoreImage)
+			if err != nil {
+				errCh <- err
+				return
+			}
+
+			if logrotate {
+				if err := startPrivLogrotate(app); err != nil {
+					errCh <- err
+					return
+				}
+			}
+			coreInfosCh <- coreInfo
+		}()
+	// }
+	// wg.Wait()
+
+	// Collect coreInfos, and maybe append seeds
+	var coreInfos []*CoreInfo
+	// for i := 0; i < len(machines); i++ {
+	select {
+	case err := <-errCh:
+		fmt.Println(Red(err.Error()))
+	case coreInfo := <-coreInfosCh:
+		coreInfos = append(coreInfos, coreInfo)
+		if seedsStr == "" {
+			seeds = append(seeds, coreInfo.P2PAddr)
+		}
+	}
+	// }
+
+	// fill in validators and write chain config to file
+	for i, coreInfo := range coreInfos {
+		coreInfo.Index = chainCfg.Validators[i].Index
+		chainCfg.Validators[i] = coreInfo
+	}
+	if err := WriteBlockchainInfo(base, chainCfg); err != nil {
+		fmt.Println(string(wire.JSONBytes(chainCfg)))
+		Exit(err.Error())
+	}
+
+	// bail if anything failed; we've already written anyone that didnt to file
+	if err != nil {
+		Exit(err.Error())
+	}
+
+	// Dial the seeds
+	fmt.Println(Green("Instruct nodes to dial each other"))
+	for _, core := range coreInfos {
+		// wg.Add(1)
+		go func(rpcAddr string) {
+			// defer wg.Done()
+			maybeSleep(len(coreInfos), 2000)
+			if err := dialSeeds(rpcAddr, seeds); err != nil {
+				fmt.Println(Red(err.Error()))
+				return
+			}
+		}(core.RPCAddr)
+	}
+	// wg.Wait()
+
+	fmt.Println(Green(Fmt("Done launching tendermint network for %v. Took %v", app, time.Since(startTime))))
+}
+
+func startPrivTMCommon(app string) error {
+	args := []string{Fmt(`--name %v_tmcommon --entrypoint true tendermint/tmbase`, app)}
+	if !runProcess("start-tmcommon", "docker run ", args, true) {
+		return errors.New("Failed to start tmcommon on machine")
+	}
+	return nil
+}
+
+func copyPrivNodeDir(app, base string) error {
+	err := copyToContainer(app, path.Join(base, "data"), "/data/tendermint/data", true)
+	if err != nil {
+		return err
+	}
+	err = copyToContainer(app, path.Join(base, "app"), "/data/tendermint/app", true)
+	if err != nil {
+		return err
+	}
+	err = copyToContainer(app, path.Join(base, "core"), "/data/tendermint/core", true)
+	if err != nil {
+		return err
+	}
+	// err = copyToContainer(app, path.Join(base, mach, "core", "/."), "/data/tendermint/core", true)
+	// if err != nil {
+	// 	return err
+	// }
+	return nil
+}
+
+// Starts data service and checks for existence of /data/tendermint/data/data.sock
+func startPrivTMData(app string) error {
+	args := []string{Fmt(`--name %v_tmdata --volumes-from %v_tmcommon -d `+
+		`elemential/elembase /data/tendermint/data/init.sh`, app, app)}
+	if !runProcess("start-tmdata", "docker run", args, true) {
+		return errors.New("Failed to start tmdata on machine")
+	}
+	for i := 1; i < 20; i++ { // TODO configure
+		time.Sleep(time.Duration(i) * time.Second)
+		if checkContainerFileExists(app+"_tmdata", "/data/tendermint/data/data.sock") {
+			return nil
+		}
+	}
+	return errors.New("Failed to start tmdata on machine (timeout)")
+}
+
+func startPrivTMApp(app, image, ports string) error {
+	var portString string
+	spl := strings.Split(ports, ",")
+	for _, s := range spl {
+		if s != "" {
+			portString = fmt.Sprintf("%s -p %s", portString, s)
+		}
+	}
+	args := []string{Fmt(`--name %v_tmapp --volumes-from %v_tmcommon %s -d `+
+		`%v /data/tendermint/app/init.sh`, app, app, portString, image)}
+	if !runProcess("start-tmapp", "docker run", args, true) {
+		return errors.New("Failed to start tmapp on machine")
+	}
+	return nil
+}
+
+func startPrivTMCore(ipAddress, app string, seeds []string, randomPort, noTMSP bool, image string) (*CoreInfo, error) {
+	portString := "-p 46656:46656 -p 46657:46657"
+	if randomPort {
+		portString = "--publish-all"
+	}
+
+	// IF APP-USE-TCP
+	//   proxyApp := Fmt("tcp://%v_tmapp:46658", app)
+	//   tmspConditions := Fmt(` --link %v_tmapp `, app)
+	// ELSE
+	proxyApp := "unix:///data/tendermint/app/app.sock"
+	tmspConditions := ""
+	// END
+
+	if noTMSP {
+		proxyApp = "nilapp" // in-proc nil app
+		tmspConditions = "" // tmcommon and tmapp weren't started
+	}
+	tmRoot := "/data/tendermint/core"
+	args := []string{Fmt(`-d %v --name %v_tmcore --volumes-from %v_tmcommon %v`+
+		`-e TMNAME="test" -e TMSEEDS="%v" -e TMROOT="%v" -e PROXYAPP="%v" `+
+		`%v /data/tendermint/core/init.sh`,
+		portString, app, app, tmspConditions,
+		eB(strings.Join(seeds, ",")), tmRoot, eB(proxyApp), image)}
+	if !runProcess("start-tmcore", "docker run", args, true) {
+		return nil, errors.New("Failed to start tmcore on machine")
+	}
+
+	// Give it some time to install and make repo.
+	time.Sleep(time.Second * 10)
+
+	// Get the node's validator info
+	// Need to retry to wait until tendermint is installed
+	for {
+		args = []string{Fmt(`%v_tmcore tendermint show_validator --log_level=error`, app)}
+		output, ok := runProcessGetResult("show-validator-tmcore", "docker exec ", args, false)
+		if !ok || output == "" {
+			fmt.Println(Yellow(Fmt("tendermint not yet installed. Waiting...")))
+			time.Sleep(time.Second * 5)
+			continue
+		} else {
+			fmt.Println(Fmt("validator: %v", output))
+
+			// now grab the node's public address and port
+			// ip, err := getMachineIP(mach)
+			// if err != nil {
+			// 	return nil, err
+			// }
+
+			coreInfo := &CoreInfo{
+				Validator: &Validator{
+					ID: "test",
+				},
+			}
+
+			var p2pPort, rpcPort = "46656", "46657"
+			if randomPort {
+				portMap, err := getPrivContainerPortMap(fmt.Sprintf("%v_tmcore", app))
+				if err != nil {
+					return nil, err
+				}
+				p2pPort, ok = portMap["46656"]
+				if !ok {
+					return nil, errors.New("No port map found for p2p port 46656 on mach")
+				}
+				rpcPort, ok = portMap["46657"]
+				if !ok {
+					return nil, errors.New("No port map found for rpc port 46657 on mach")
+				}
+			}
+			coreInfo.P2PAddr = fmt.Sprintf("%v:%v", ipAddress, p2pPort)
+			coreInfo.RPCAddr = fmt.Sprintf("%v:%v", ipAddress, rpcPort)
+
+			// get pubkey from rpc endpoint
+			// try a few times in case the rpc server is slow to start
+			var result ctypes.TMResult
+			for i := 0; i < 10; i++ {
+				time.Sleep(time.Second)
+				c := client.NewClientURI(fmt.Sprintf("%s", coreInfo.RPCAddr))
+				if _, err := c.Call("status", nil, &result); err != nil {
+					fmt.Println(Yellow(Fmt("Error getting rpc status for %v: %v", coreInfo.RPCAddr, err)))
+					continue
+				}
+				status := result.(*ctypes.ResultStatus)
+				coreInfo.Validator.PubKey = status.PubKey
+				break
+			}
+			// if err != nil {
+			// 	return nil, fmt.Errorf("Error getting PubKey on %s: %v", coreInfo.RPCAddr, err)
+			// }
+
+			return coreInfo, nil
+		}
+	}
+	return nil, nil
+}
+
+func getPrivContainerPortMap(container string) (map[string]string, error) {
+	args := []string{Fmt(`port %v`, container)}
+	output, ok := runProcessGetResult(fmt.Sprintf("get-ports-%v", container), "docker", args, true)
+	if !ok {
+		return nil, errors.New("Failed to get the exposed ports for container " + container)
+	}
+	// what a hack. might be time to start using the go-dockerclient or eris-cli packages
+	portMap := make(map[string]string)
+	spl := strings.Split(string(output), "\n")
+	for _, s := range spl {
+		// 4001/tcp -> 0.0.0.0:32769
+		spl2 := strings.Split(s, "->")
+		if len(spl2) < 2 {
+			continue
+		}
+		port := strings.TrimSpace(strings.Split(spl2[0], "/")[0])
+		mapS := strings.Split(spl2[1], ":")
+		mappedTo := strings.TrimSpace(mapS[len(mapS)-1])
+		portMap[port] = mappedTo
+	}
+	return portMap, nil
+}
+
+func startPrivLogrotate(app string) error {
+	args := []string{Fmt(`run --name %v_logrotate --volumes-from %v_tmcommon -d `+
+		`-v /var/lib/docker/containers:/var/lib/docker/containers:rw tendermint/logrotate`, app, app)}
+	if !runProcess("start-logrotate", "docker", args, true) {
+		return errors.New("Failed to start logrotate on machine")
+	}
+	return nil
+}

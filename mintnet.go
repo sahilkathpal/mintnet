@@ -18,8 +18,8 @@ var (
 
 func main() {
 	app := cli.NewApp()
-	app.Name = "mintnet"
-	app.Usage = "mintnet [command] [args...]"
+	app.Name = "elemint"
+	app.Usage = "elemint [command] [args...]"
 	app.Version = "0.1.0"
 	app.Commands = []cli.Command{
 		{
@@ -161,12 +161,12 @@ func main() {
 				cli.StringFlag{
 					Name:  "tmcore-image",
 					Usage: "Docker image to use for tendermint core",
-					Value: "tendermint/tmbase",
+					Value: "elemential/elembase:v1",
 				},
 				cli.StringFlag{
 					Name:  "tmapp-image",
 					Usage: "Docker image to use for tendermint app",
-					Value: "tendermint/tmbase",
+					Value: "elemential/elembase:v1",
 				},
 				cli.StringFlag{
 					Name:  "tmapp-ports",
@@ -178,6 +178,56 @@ func main() {
 					Usage: "Start tendermint/logrotate container",
 				},
 				machFlag,
+			},
+			Action: func(c *cli.Context) error {
+				cmdStart(c)
+				return nil
+			},
+		},
+
+		{
+			Name:      "join",
+			Usage:     "Join blockchain",
+			ArgsUsage: "[appName] [baseDir]",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "seeds",
+					Value: "",
+					Usage: "Comma separated list of machine names for seed, defaults to --machines",
+				},
+				cli.BoolFlag{
+					Name:  "publish-all,P",
+					Usage: "Publish all exposed ports to random ports",
+				}, // or should we make random be default, and let users attempt to force the port?
+				cli.BoolFlag{
+					Name:  "no-tmsp",
+					Usage: "Use a null, in-process app",
+				},
+				cli.StringFlag{
+					Name:  "tmcore-image",
+					Usage: "Docker image to use for tendermint core",
+					Value: "elemential/elembase:v1",
+				},
+				cli.StringFlag{
+					Name:  "tmapp-image",
+					Usage: "Docker image to use for tendermint app",
+					Value: "elemential/elembase:v1",
+				},
+				cli.StringFlag{
+					Name:  "tmapp-ports",
+					Usage: "Port bindings for the app",
+					Value: "",
+				},
+				cli.BoolFlag{
+					Name:  "logrotate",
+					Usage: "Start tendermint/logrotate container",
+				},
+				machFlag,
+				cli.StringFlag{
+					Name:  "ip",
+					Usage: "IP address for the app",
+					Value: "",
+				}
 			},
 			Action: func(c *cli.Context) error {
 				cmdStart(c)

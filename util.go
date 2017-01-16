@@ -136,3 +136,31 @@ func maybeSleep(n int, t int) {
 		time.Sleep(time.Millisecond * time.Duration(sleepMS))
 	}
 }
+
+//---------------------------------------------------------------------------------
+func copyToContainer(app string, srcPath string, dstPath string, copyContents bool) error {
+
+	//docker cp the file into the container
+	if copyContents {
+		srcPath = srcPath + "/."
+	}
+	args := []string{Fmt(" %v %v_tmcommon:%v", srcPath, app, dstPath)}
+	if !runProcess("docker-cp-file", "docker cp", args, true) {
+		return errors.New("Failed to docker-cp file to container in machine")
+	}
+
+	// Next, change the ownership of the file to tmuser
+	// TODO We don't really want to change all the permissions
+	args = []string{Fmt(`--rm --volumes-from %v_tmcommon -u root tendermint/tmbase chown -R tmuser:tmuser %v`, app, dstPath)}
+	if !runProcess("docker-chmod-file", "docker run", args, true) {
+		return errors.New("Failed to docker-run(chmod) file in machine")
+	}
+	return nil
+}
+
+// NOTE: returns false if any error
+func checkContainerFileExists(container string, path string) bool {
+	args := []string{Fmt(`%v ls %v`, container, path)}
+	_, ok := runProcessGetResult("check-file-exists-", "docker exec", args, false)
+	return ok
+}
