@@ -187,8 +187,8 @@ func listMachinesFromBase(base string) ([]string, error) {
 */
 
 func startTMCommon(mach, app string) error {
-	args := []string{Fmt(`docker run --name %v_tmcommon --entrypoint true elemential/elembase:v1`, app)}
-	if !runProcess("start-tmcommon-"+mach, args, true) {
+	args := []string{"ssh", mach, Fmt(`docker run --name %v_tmcommon --entrypoint true elemential/elembase:v1`, app)}
+	if !runProcess("start-tmcommon-"+mach, "docker-machine", args, true) {
 		return errors.New("Failed to start tmcommon on machine " + mach)
 	}
 	return nil
@@ -216,9 +216,9 @@ func copyNodeDir(mach, app, base string) error {
 
 // Starts data service and checks for existence of /data/tendermint/data/data.sock
 func startTMData(mach, app string) error {
-	args := []string{Fmt(`docker run --name %v_tmdata --volumes-from %v_tmcommon -d `+
+	args := []string{"ssh", mach, Fmt(`docker run --name %v_tmdata --volumes-from %v_tmcommon -d `+
 		`elemential/elembase:v1 /data/tendermint/data/init.sh`, app, app)}
-	if !runProcess("start-tmdata-"+mach, args, true) {
+	if !runProcess("start-tmdata-"+mach, "docker-machine", args, true) {
 		return errors.New("Failed to start tmdata on machine " + mach)
 	}
 	for i := 1; i < 20; i++ { // TODO configure
@@ -238,18 +238,18 @@ func startTMApp(mach, app, image, ports string) error {
 			portString = fmt.Sprintf("%s -p %s", portString, s)
 		}
 	}
-	args := []string{Fmt(`docker run --name %v_tmapp --volumes-from %v_tmcommon %s -d `+
+	args := []string{"ssh", mach, Fmt(`docker run --name %v_tmapp --volumes-from %v_tmcommon %s -d `+
 		`%v /data/tendermint/app/init.sh`, app, app, portString, image)}
-	if !runProcess("start-tmapp-"+mach, args, true) {
+	if !runProcess("start-tmapp-"+mach, "docker-machine", args, true) {
 		return errors.New("Failed to start tmapp on machine " + mach)
 	}
 	return nil
 }
 
 func startLogrotate(mach, app string) error {
-	args := []string{Fmt(`docker run --name %v_logrotate --volumes-from %v_tmcommon -d `+
+	args := []string{"ssh", mach, Fmt(`docker run --name %v_logrotate --volumes-from %v_tmcommon -d `+
 		`-v /var/lib/docker/containers:/var/lib/docker/containers:rw tendermint/logrotate`, app, app)}
-	if !runProcess("start-logrotate-"+mach, args, true) {
+	if !runProcess("start-logrotate-"+mach, "docker-machine", args, true) {
 		return errors.New("Failed to start logrotate on machine " + mach)
 	}
 	return nil
@@ -274,12 +274,12 @@ func startTMCore(mach, app string, seeds []string, randomPort, noTMSP bool, imag
 		tmspConditions = "" // tmcommon and tmapp weren't started
 	}
 	tmRoot := "/data/tendermint/core"
-	args := []string{Fmt(`docker run -d %v --name %v_tmcore --volumes-from %v_tmcommon %v`+
+	args := []string{"ssh", mach, Fmt(`docker run -d %v --name %v_tmcore --volumes-from %v_tmcommon %v`+
 		`-e TMNAME="%v" -e TMSEEDS="%v" -e TMROOT="%v" -e PROXYAPP="%v" `+
 		`%v /data/tendermint/core/init.sh`,
 		portString, app, app, tmspConditions,
 		eB(mach), eB(strings.Join(seeds, ",")), tmRoot, eB(proxyApp), image)}
-	if !runProcess("start-tmcore-"+mach, args, true) {
+	if !runProcess("start-tmcore-"+mach, "docker-machine", args, true) {
 		return nil, errors.New("Failed to start tmcore on machine " + mach)
 	}
 
@@ -289,8 +289,8 @@ func startTMCore(mach, app string, seeds []string, randomPort, noTMSP bool, imag
 	// Get the node's validator info
 	// Need to retry to wait until tendermint is installed
 	for {
-		args = []string{Fmt(`docker exec %v_tmcore tendermint show_validator --log_level=error`, app)}
-		output, ok := runProcessGetResult("show-validator-tmcore-"+mach, args, false)
+		args = []string{"ssh", mach, Fmt(`docker exec %v_tmcore tendermint show_validator --log_level=error`, app)}
+		output, ok := runProcessGetResult("show-validator-tmcore-"+mach, "docker-machine", args, false)
 		if !ok || output == "" {
 			fmt.Println(Yellow(Fmt("tendermint not yet installed in %v. Waiting...", mach)))
 			time.Sleep(time.Second * 5)
@@ -364,8 +364,8 @@ func dialSeeds(rpcAddr string, seeds []string) error {
 }
 
 func getContainerPortMap(mach, container string) (map[string]string, error) {
-	args := []string{Fmt(`docker port %v`, container)}
-	output, ok := runProcessGetResult(fmt.Sprintf("get-ports-%v-%v", mach, container), args, true)
+	args := []string{"ssh", mach, Fmt(`docker port %v`, container)}
+	output, ok := runProcessGetResult(fmt.Sprintf("get-ports-%v-%v", mach, container), "docker-machine", args, true)
 	if !ok {
 		return nil, errors.New("Failed to get the exposed ports on machine " + mach + " for container " + container)
 	}
