@@ -697,10 +697,10 @@ func copyPrivNodeDir(app, base string) error {
 	if err != nil {
 		return err
 	}
-	// err = copyToContainer(app, path.Join(base, mach, "core", "/."), "/data/tendermint/core", true)
-	// if err != nil {
-	// 	return err
-	// }
+	err = copyToContainer(app, path.Join(base, "node0", "core", "/."), "/data/tendermint/core", true)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
