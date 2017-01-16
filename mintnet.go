@@ -227,7 +227,7 @@ func main() {
 					Name:  "ip",
 					Usage: "IP address for the app",
 					Value: "",
-				}
+				},
 			},
 			Action: func(c *cli.Context) error {
 				cmdStart(c)
