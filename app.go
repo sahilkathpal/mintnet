@@ -187,7 +187,7 @@ func listMachinesFromBase(base string) ([]string, error) {
 */
 
 func startTMCommon(mach, app string) error {
-	args := []string{"ssh", mach, Fmt(`docker run --name %v_tmcommon --entrypoint true tendermint/tmbase`, app)}
+	args := []string{"ssh", mach, Fmt(`docker run --name %v_tmcommon --entrypoint true elemential/elembase:v1.01`, app)}
 	if !runProcess("start-tmcommon-"+mach, "docker-machine", args, true) {
 		return errors.New("Failed to start tmcommon on machine " + mach)
 	}
@@ -217,7 +217,7 @@ func copyNodeDir(mach, app, base string) error {
 // Starts data service and checks for existence of /data/tendermint/data/data.sock
 func startTMData(mach, app string) error {
 	args := []string{"ssh", mach, Fmt(`docker run --name %v_tmdata --volumes-from %v_tmcommon -d `+
-		`tendermint/tmbase /data/tendermint/data/init.sh`, app, app)}
+		`elemential/elembase:v1.01 /data/tendermint/data/init.sh`, app, app)}
 	if !runProcess("start-tmdata-"+mach, "docker-machine", args, true) {
 		return errors.New("Failed to start tmdata on machine " + mach)
 	}
@@ -238,7 +238,7 @@ func startTMApp(mach, app, image, ports string) error {
 			portString = fmt.Sprintf("%s -p %s", portString, s)
 		}
 	}
-	args := []string{"ssh", mach, Fmt(`docker run --name %v_tmapp --volumes-from %v_tmcommon %s -d `+
+	args := []string{"ssh", mach, Fmt(`docker run --name %v_tmapp --net="host" --volumes-from %v_tmcommon %s -d `+
 		`%v /data/tendermint/app/init.sh`, app, app, portString, image)}
 	if !runProcess("start-tmapp-"+mach, "docker-machine", args, true) {
 		return errors.New("Failed to start tmapp on machine " + mach)
@@ -332,7 +332,7 @@ func startTMCore(mach, app string, seeds []string, randomPort, noTMSP bool, imag
 			// try a few times in case the rpc server is slow to start
 			var result ctypes.TMResult
 			for i := 0; i < 10; i++ {
-				time.Sleep(time.Second)
+				time.Sleep(time.Second * 30)
 				c := client.NewClientURI(fmt.Sprintf("%s", coreInfo.RPCAddr))
 				if _, err = c.Call("status", nil, &result); err != nil {
 					fmt.Println(Yellow(Fmt("Error getting rpc status for %v: %v", coreInfo.RPCAddr, err)))

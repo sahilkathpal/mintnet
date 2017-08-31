@@ -1,4 +1,4 @@
-.PHONY: get_deps build all install
+.PHONY: test test_race test_integrations get_deps build all install
 
 all: get_deps install test
 

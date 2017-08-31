@@ -161,12 +161,12 @@ func main() {
 				cli.StringFlag{
 					Name:  "tmcore-image",
 					Usage: "Docker image to use for tendermint core",
-					Value: "tendermint/tmbase",
+					Value: "elemential/elembase:v1.01",
 				},
 				cli.StringFlag{
 					Name:  "tmapp-image",
 					Usage: "Docker image to use for tendermint app",
-					Value: "tendermint/tmbase",
+					Value: "elemential/elembase:v1.01",
 				},
 				cli.StringFlag{
 					Name:  "tmapp-ports",

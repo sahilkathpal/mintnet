@@ -36,7 +36,7 @@ func copyToMachine(mach string, app string, srcPath string, dstPath string, copy
 
 	// Next, change the ownership of the file to tmuser
 	// TODO We don't really want to change all the permissions
-	args = []string{"ssh", mach, Fmt(`docker run --rm --volumes-from %v_tmcommon -u root tendermint/tmbase chown -R tmuser:tmuser %v`, app, dstPath)}
+	args = []string{"ssh", mach, Fmt(`docker run --rm --volumes-from %v_tmcommon -u root elemential/elembase:v1.01 chown -R tmuser:tmuser %v`, app, dstPath)}
 	if !runProcess("docker-chmod-file-"+mach, "docker-machine", args, true) {
 		return errors.New("Failed to docker-run(chmod) file in machine " + mach)
 	}
@@ -61,7 +61,7 @@ func runProcess(label string, command string, args []string, verbose bool) bool 
 
 func runProcessGetResult(label string, command string, args []string, verbose bool) (string, bool) {
 	outFile := NewBufferCloser(nil)
-	proc, err := pcm.StartProcess(label, command, args, nil, outFile)
+	proc, err := pcm.StartProcess(label, "", command, args, nil, outFile)
 	if err != nil {
 		if verbose {
 			fmt.Println(Red(err.Error()))
